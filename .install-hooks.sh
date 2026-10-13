@@ -1,16 +1,23 @@
 #!/bin/sh
-REPO_DIR=$(git rev-parse --show-toplevel)
-GIT_DIR=$REPO_DIR/.git
-VENV_ACTIVATE=$VIRTUAL_ENV/bin/activate
-if [[ ! -f $VENV_ACTIVATE ]]
-then
-    echo "Could not find your virtual environment"
+set -eu
+
+if [ -z "${VIRTUAL_ENV:-}" ] || [ ! -x "$VIRTUAL_ENV/bin/ruff" ]; then
+    echo "Activate the development virtual environment and install the dev extra first." >&2
+    exit 1
 fi
 
-echo "#!/bin/sh" >> $GIT_DIR/hooks/pre-commit
-echo "set -e" >> $GIT_DIR/hooks/pre-commit
-echo "source $VENV_ACTIVATE" >> $GIT_DIR/hooks/pre-commit
-echo "black --check ." >> $GIT_DIR/hooks/pre-commit
-echo "isort -c ." >> $GIT_DIR/hooks/pre-commit
-echo "flake8 ." >> $GIT_DIR/hooks/pre-commit
-chmod +x $GIT_DIR/hooks/pre-commit
+HOOK=$(git rev-parse --git-path hooks/pre-commit)
+if [ -e "$HOOK" ]; then
+    echo "A pre-commit hook already exists at $HOOK; leaving it unchanged." >&2
+    exit 1
+fi
+
+cat > "$HOOK" <<EOF
+#!/bin/sh
+set -e
+REPO_DIR=\$(git rev-parse --show-toplevel)
+cd "\$REPO_DIR"
+"$VIRTUAL_ENV/bin/ruff" check .
+"$VIRTUAL_ENV/bin/ruff" format --check .
+EOF
+chmod +x "$HOOK"
